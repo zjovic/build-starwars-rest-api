@@ -8,7 +8,7 @@ from flask_swagger import swagger
 from flask_cors import CORS
 from utils import APIException, generate_sitemap
 from admin import setup_admin
-from models import db, User
+from models import db, User, Favourite, Character, Planet
 
 app = Flask(__name__)
 app.url_map.strict_slashes = False
@@ -34,6 +34,7 @@ def sitemap():
 def create_user():
     request_body = request.get_json(force=True)
     request_keys = list(request_body.keys())
+
     if len(request_keys)==0:
         return "The request body is null", 400
     elif 'email' not in request_keys or request_body['email']=="":
@@ -45,8 +46,10 @@ def create_user():
     else:
         email = request_body['email']
         password = request_body['password']
+        is_active = request_body['is_active']
 
-        new_user = User(email,password)
+        new_user = User(email,password,is_active)
+
         db.session.add(new_user)
         db.session.commit()
         return jsonify(new_user.serialize()), 200
@@ -63,50 +66,27 @@ def get_users():
 
         for user in users:
             user_data = {}
-            user_data['id'] = habit.id
-            user_data['email'] = habit.email
-            user_data['username'] = habit.username
+            user_data['id'] = user.id
+            user_data['email'] = user.email
+            user_data['password'] = user.password
+            user_data['is_active'] = user.is_active
             output.append(user_data)
 
         return jsonify({'users': output})
 
 # INSERT NEW CHARACTER
-@app.route('/people', methods=['POST'])
+@app.route('/characters', methods=['POST'])
 def create_char():
-    request_body = request.get_json(force=True)
-    try:
-        check = Character.query.filter_by(name=request_body["name"]).first()
-        if check != None:
-            raise Exception()
-    except Exception:
-        return jsonify({"msg":f"This character already exists in the database:{check.serialize()}"}),500
-    else:
-        character = Character()
-        fields = list(character.serialize().keys())
-        fields.remove("id")
-    if all(f in request_body for f in fields):
-        if all(value != "" for value in request_body.values()):
-            new_character = Character()
-            for f in fields:
-                setattr(new_character, f, request_body[f])
-            db.session.add(new_character)
-            db.session.commit()
-            return jsonify(new_character.serialize()),200
-        else:
-            missing_values = []
-            for f in fields:
-                if request_body[f] == "": 
-                    missing_values.append(f)
-            return jsonify(f"The following field values are empty: {missing_values}"),400
-    else:
-        missing_fields = []
-        for f in fields:
-            if f not in request_body: 
-                missing_fields.append(f)
-        return jsonify(f"The following fields are missing: {missing_fields}"),400
+    data = request.get_json()
+
+    new_char = Character(name = data['name'], gender = data['gender'], birth_year = data['birth_year'], eye_color = data['eye_color'], skin_color = data['skin_color'], height = data['height'])
+
+    db.session.add(new_character)
+    db.session.commit()
+    return jsonify(new_character.serialize()),200
 
 # UPDATE CHARACTER
-@app.route('/people/<int:id>', methods=['PUT'])
+@app.route('/characters/<int:id>', methods=['PUT'])
 def update_char(id):
     character = Character.query.filter_by(id=id).first()
     if character != None:
@@ -131,7 +111,7 @@ def update_char(id):
 
 
 # DELETE CHARACTER
-@app.route('/people/<int:id>', methods=['DELETE'])
+@app.route('/characters/<int:id>', methods=['DELETE'])
 def delete_char(id):
     try:
         character = Character.query.filter_by(id=id).first()
@@ -145,15 +125,15 @@ def delete_char(id):
         return jsonify(character.serialize()),200
 
 # GET ALL CHARACTERS
-@app.route('/people', methods=['GET'])
-def get_people():
-    all_people = Character.query.all()
-    all_people = list(map(lambda x: x.serialize(), all_people))
-    json_text = jsonify(all_people)
+@app.route('/characters', methods=['GET'])
+def get_characters():
+    all_characters = Character.query.all()
+    all_characters = list(map(lambda x: x.serialize(), all_characters))
+    json_text = jsonify(all_characters)
     return json_text
 
 # GET CHARACTER
-@app.route('/people/<int:character_id>', methods=['GET'])
+@app.route('/characters/<int:character_id>', methods=['GET'])
 def get_character(character_id):
     try:
         char = Character.query.get(character_id)
@@ -298,7 +278,7 @@ def add_favourite_planet(planet_id):
         return jsonify(new_favourite_planet.serialize()),200
 
 #Add a new favourite character to the current user
-@app.route('/favourite/people/<int:character_id>', methods=['POST'])
+@app.route('/favourite/characters/<int:character_id>', methods=['POST'])
 def add_favourite_character(character_id):
 
     active_user = User.query.filter_by(is_active=True).first()
@@ -343,7 +323,7 @@ def delete_favourite_planet(planet_id):
         return jsonify(user_fav_planet.serialize()),200
 
 # DELETE FAVOURITE CHARACTER
-@app.route('/favourite/people/<int:character_id>', methods = ['DELETE'])
+@app.route('/favourite/characters/<int:character_id>', methods = ['DELETE'])
 def delete_favourite_character(character_id):
     active_user = User.query.filter_by(is_active=True).first()
     try:
